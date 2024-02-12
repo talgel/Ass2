@@ -124,17 +124,21 @@ public class Player implements Runnable {
      * @post - the player's score is updated in the ui.
      */
     public void point() {
-        // TODO implement
-
+        score++;
+        try{
+        Thread.sleep(env.config.pointFreezeMillis);
+          } catch (InterruptedException ignored) {}
         int ignored = table.countCards(); // this part is just for demonstration in the unit tests
-        env.ui.setScore(id, ++score);
+        env.ui.setScore(id,score);
     }
 
     /**
      * Penalize a player and perform other related actions.
      */
     public void penalty() {
-        // TODO implement
+        try{
+        Thread.sleep(env.config.penaltyFreezeMillis);
+             } catch (InterruptedException ignored) {}
     }
 
     public int score() {

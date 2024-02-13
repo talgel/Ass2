@@ -29,6 +29,9 @@ public class Table {
      */
     protected final Integer[] cardToSlot; // slot per card (if any)
 
+    // Information for the tokens - slotsToken[i][j] == ture iff player[j] has token on slot [i]
+    protected boolean[][] slotsToken;
+
     /**
      * Constructor for testing.
      *
@@ -41,6 +44,7 @@ public class Table {
         this.env = env;
         this.slotToCard = slotToCard;
         this.cardToSlot = cardToSlot;
+        this.slotsToken = new boolean[env.config.tableSize][env.config.players];
     }
 
     /**
@@ -56,7 +60,7 @@ public class Table {
     /**
      * This method prints all possible legal sets of cards that are currently on the table.
      */
-    public void hints() {
+    public void hints() { //synchronized?
         List<Integer> deck = Arrays.stream(slotToCard).filter(Objects::nonNull).collect(Collectors.toList());
         env.util.findSets(deck, Integer.MAX_VALUE).forEach(set -> {
             StringBuilder sb = new StringBuilder().append("Hint: Set found: ");
@@ -71,7 +75,7 @@ public class Table {
      *
      * @return - the number of cards on the table.
      */
-    public int countCards() {
+    public synchronized int countCards() { //synchronized
         int cards = 0;
         for (Integer card : slotToCard)
             if (card != null)
@@ -90,11 +94,13 @@ public class Table {
         try {
             Thread.sleep(env.config.tableDelayMillis);
         } catch (InterruptedException ignored) {}
-
+        synchronized(this) {
         cardToSlot[card] = slot;
         slotToCard[slot] = card;
-
+        }
         // TODO implement
+        
+
     }
 
     /**
@@ -105,8 +111,11 @@ public class Table {
         try {
             Thread.sleep(env.config.tableDelayMillis);
         } catch (InterruptedException ignored) {}
-
-        // TODO implement
+        synchronized(this) {
+            Integer card = slotToCard[slot];
+            cardToSlot[slot] = null;
+            slotToCard[card] = null;
+        }
     }
 
     /**
@@ -115,7 +124,12 @@ public class Table {
      * @param slot   - the slot on which to place the token.
      */
     public void placeToken(int player, int slot) {
-        // TODO implement
+        if (slotsToken[slot][player]) {
+            removeToken(player, slot);
+        }
+        else {
+            slotsToken[slot][player] = true;            
+        }
     }
 
     /**
@@ -125,7 +139,32 @@ public class Table {
      * @return       - true iff a token was successfully removed.
      */
     public boolean removeToken(int player, int slot) {
-        // TODO implement
+        if (slotsToken[slot][player]) {
+            slotsToken[slot][player] = false;
+            return true;
+        }
         return false;
+    }
+
+    public synchronized int countTokens(int playerId) {
+        int counter = 0;
+        for (int i = 0 ; i < env.config.tableSize ; i++) {
+            if ( slotsToken[i][playerId]) {
+                counter++;
+            }
+        }
+        return counter;
+    }
+
+    public synchronized int[] playersSlot(int playerId) {
+        int[] slots = new int[3];
+        int counter = 0;
+        for (int i = 0 ; i < env.config.tableSize ; i++) {
+            if (slotsToken[i][playerId]) {
+                slots[counter] = i;
+                counter++;
+            }
+        }
+        return slots;
     }
 }

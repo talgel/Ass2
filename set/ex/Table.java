@@ -115,6 +115,9 @@ public class Table {
             Integer card = slotToCard[slot];
             cardToSlot[slot] = null;
             slotToCard[card] = null;
+            for(int i = 0 ; i<env.config.players ; i++) {
+                slotsToken[slot][i] = false;
+            }
         }
     }
 

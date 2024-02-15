@@ -2,8 +2,10 @@ package bguspl.set.ex;
 
 import bguspl.set.Env;
 
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Queue;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -89,7 +91,6 @@ public class Dealer implements Runnable {
      * Called when the game should be terminated.
      */
     public void terminate() {
-        // TODO implement
         terminate = true;
     }
 
@@ -106,14 +107,49 @@ public class Dealer implements Runnable {
      * Checks cards should be removed from the table and removes them.
      */
     private void removeCardsFromTable() {
-        // TODO implement
+        synchronized(table) {
+        while(claimedPlayer.size() > 0) {
+            boolean stop = false;
+            Player nextPlayer = claimedPlayer.remove();
+            for (Integer slot : nextPlayer.mySet) {
+                if(!table.slotsToken[slot][nextPlayer.id]) {
+                    stop = true;
+                }
+            }
+            if(!stop) {
+                boolean isSet = env.util.testSet(nextPlayer.mySet);
+                if(isSet){ 
+                    for (Integer slot : nextPlayer.mySet) {
+                        table.removeCard(slot);
+                    }
+                    //point player
+                }
+                else {
+                    //penalty player
+                }
+
+            }
+        }
+    }
     }
 
     /**
      * Check if any cards can be removed from the deck and placed on the table.
      */
     private void placeCardsOnTable() {
-        // TODO implement
+    synchronized(table){
+        for (int i = 0 ; i < env.config.tableSize ; i ++) {
+            if(table.slotToCard[i] == null && deck.size() > 0) {
+                table.placeCard(deck.remove(0), i);
+            }
+        }
+        List<Integer> cardsOnTable = Arrays.stream(table.slotToCard).filter(Objects::nonNull).collect(Collectors.toList());
+
+        if(env.util.findSets(cardsOnTable, 1).size() == 0){
+            removeAllCardsFromTable();
+        }
+    }
+    
     }
 
     /**
@@ -130,15 +166,22 @@ public class Dealer implements Runnable {
      * Reset and/or update the countdown and the countdown display.
      */
     private void updateTimerDisplay(boolean reset) {
-        // TODO implement
-        env.ui.setCountdown(reshuffleTime, reset);
+        env.ui.setCountdown(reshuffleTime-System.currentTimeMillis(), reset);
     }
 
     /**
      * Returns all the cards from the table to the deck.
      */
     private void removeAllCardsFromTable() {
-        // TODO implement
+        synchronized(table){
+        for(int i = 0 ; i<env.config.tableSize ; i ++) {
+            if (table.slotToCard[i]!=null) {
+                int card = table.slotToCard[i];
+                deck.add(card);
+                table.removeCard(i);
+            } 
+        }
+    }
     }
 
     /**

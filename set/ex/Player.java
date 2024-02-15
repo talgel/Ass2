@@ -55,7 +55,7 @@ public class Player implements Runnable {
     private Queue<Integer> q;
     
     // Array holding the players slots
-    public Integer[] tokens;
+    public int[] mySet;
 
     /**
      * The class constructor.

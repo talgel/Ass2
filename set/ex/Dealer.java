@@ -2,7 +2,9 @@ package bguspl.set.ex;
 
 import bguspl.set.Env;
 
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Queue;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -20,6 +22,7 @@ public class Dealer implements Runnable {
      * Game entities.
      */
     private final Table table;
+
     private final Player[] players;
 
     /**
@@ -32,6 +35,9 @@ public class Dealer implements Runnable {
      */
     private volatile boolean terminate;
 
+    // players claimed sets
+    public volatile Queue<Player> claimedPlayer;
+
     /**
      * The time when the dealer needs to reshuffle the deck due to turn timeout.
      */
@@ -42,6 +48,9 @@ public class Dealer implements Runnable {
         this.table = table;
         this.players = players;
         deck = IntStream.range(0, env.config.deckSize).boxed().collect(Collectors.toList());
+
+        // new
+        claimedPlayer = new LinkedList<Player>();
     }
 
     /**
@@ -50,6 +59,10 @@ public class Dealer implements Runnable {
     @Override
     public void run() {
         env.logger.info("thread " + Thread.currentThread().getName() + " starting.");
+        for(Player player : players) {
+            Thread t = new Thread(player);
+            t.start();
+        }
         while (!shouldFinish()) {
             placeCardsOnTable();
             timerLoop();
@@ -77,6 +90,7 @@ public class Dealer implements Runnable {
      */
     public void terminate() {
         // TODO implement
+        terminate = true;
     }
 
     /**
@@ -106,7 +120,10 @@ public class Dealer implements Runnable {
      * Sleep for a fixed amount of time or until the thread is awakened for some purpose.
      */
     private void sleepUntilWokenOrTimeout() {
-        // TODO implement
+        try {
+            Thread.sleep(env.config.turnTimeoutMillis);
+        }
+        catch(InterruptedException e) {}
     }
 
     /**
@@ -114,6 +131,7 @@ public class Dealer implements Runnable {
      */
     private void updateTimerDisplay(boolean reset) {
         // TODO implement
+        env.ui.setCountdown(reshuffleTime, reset);
     }
 
     /**
@@ -128,5 +146,6 @@ public class Dealer implements Runnable {
      */
     private void announceWinners() {
         // TODO implement
+
     }
 }

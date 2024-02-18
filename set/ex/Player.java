@@ -1,5 +1,8 @@
 package bguspl.set.ex;
-
+import java.util.Queue;
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
 import bguspl.set.Env;
 
 /**
@@ -28,7 +31,7 @@ public class Player implements Runnable {
     /**
      * The thread representing the current player.
      */
-    private Thread playerThread;
+    public Thread playerThread;
 
     /**
      * The thread of the AI (computer) player (an additional thread used to generate key presses).
@@ -50,6 +53,17 @@ public class Player implements Runnable {
      */
     private int score;
 
+    // Queue holding the incoming presses
+    private Queue<Integer> q;
+    
+    // Array holding the players slots
+    public List<Integer> mySet;
+
+    //int determining if player should be scored (1), penalized (2) or dismissed (0)
+    public volatile int panishOrScore;
+
+    //Pointer to the dealer object
+    Dealer dealer;
     /**
      * The class constructor.
      *
@@ -59,11 +73,17 @@ public class Player implements Runnable {
      * @param id     - the id of the player.
      * @param human  - true iff the player is a human player (i.e. input is provided manually, via the keyboard).
      */
+
+
     public Player(Env env, Dealer dealer, Table table, int id, boolean human) {
         this.env = env;
         this.table = table;
         this.id = id;
         this.human = human;
+        this.dealer = dealer;
+        q = new LinkedList<Integer>();
+        panishOrScore = 0;
+        mySet = new ArrayList<Integer>();
     }
 
     /**
@@ -77,6 +97,40 @@ public class Player implements Runnable {
 
         while (!terminate) {
             // TODO implement main player loop
+            panishOrScore = 0;
+            synchronized(this){
+                while(q.isEmpty()){
+                     try {
+                    q.wait();
+                    }
+                    catch(InterruptedException ignored) {}
+                }
+                Integer nextSlot = q.remove();
+                table.placeToken(id, nextSlot);
+                if(mySet.size() == 3) {
+                    dealer.claimedPlayer.add(this);
+                    dealer.dealerThread.interrupt();
+                    while(dealer.claimedPlayer.contains(this)) {
+                        try{
+                            wait();
+                        }
+                        catch(InterruptedException e) {}
+                    }
+                    if(panishOrScore == 1) {
+                        this.score();
+                        mySet.clear();
+                    }
+                    else if (panishOrScore == 2) {
+                        this.penalty();
+                        mySet.clear();
+                    }
+                }
+                
+                //place or remove token
+                //remove from q
+                //if 3 tokens placed - point or penalty
+                //clear slotsToken
+            }
         }
         if (!human) try { aiThread.join(); } catch (InterruptedException ignored) {}
         env.logger.info("thread " + Thread.currentThread().getName() + " terminated.");
@@ -86,15 +140,27 @@ public class Player implements Runnable {
      * Creates an additional thread for an AI (computer) player. The main loop of this thread repeatedly generates
      * key presses. If the queue of key presses is full, the thread waits until it is not full.
      */
+
     private void createArtificialIntelligence() {
         // note: this is a very, very smart AI (!)
         aiThread = new Thread(() -> {
             env.logger.info("thread " + Thread.currentThread().getName() + " starting.");
             while (!terminate) {
                 // TODO implement player key press simulator
-                try {
-                    synchronized (this) { wait(); }
-                } catch (InterruptedException ignored) {}
+                synchronized(this){
+                while(isFull()) {
+                    try{
+                        q.wait();
+                      }
+                    catch (InterruptedException ignored) {}
+                }
+                int randomSlot = (int) Math.random()*env.config.tableSize;
+                keyPressed(randomSlot);
+                }
+                // Original code
+                // try {
+                //     synchronized (this) { wait(); }
+                // } catch (InterruptedException ignored) {}
             }
             env.logger.info("thread " + Thread.currentThread().getName() + " terminated.");
         }, "computer-" + id);
@@ -106,6 +172,7 @@ public class Player implements Runnable {
      */
     public void terminate() {
         // TODO implement
+        terminate = true;
     }
 
     /**
@@ -113,8 +180,12 @@ public class Player implements Runnable {
      *
      * @param slot - the slot corresponding to the key pressed.
      */
-    public void keyPressed(int slot) {
+    public synchronized void keyPressed(int slot) {
         // TODO implement
+        if (!isFull()) {
+            q.add(slot);
+            q.notifyAll();
+        }
     }
 
     /**
@@ -124,20 +195,36 @@ public class Player implements Runnable {
      * @post - the player's score is updated in the ui.
      */
     public void point() {
-        // TODO implement
-
+        synchronized(this) {
+            env.ui.setScore(id,++score);
+        }
+        try{
+            Thread.sleep(env.config.pointFreezeMillis);
+          } catch (InterruptedException ignored) {}
         int ignored = table.countCards(); // this part is just for demonstration in the unit tests
-        env.ui.setScore(id, ++score);
+
     }
 
     /**
      * Penalize a player and perform other related actions.
      */
     public void penalty() {
-        // TODO implement
+        try{
+        Thread.sleep(env.config.penaltyFreezeMillis);
+             } catch (InterruptedException ignored) {}
     }
 
     public int score() {
         return score;
     }
+
+    public synchronized boolean isFull() {
+        return (q.size()>2);
+    }
+
+    public void startThread() {
+        playerThread.start();
+    }
+
+
 }

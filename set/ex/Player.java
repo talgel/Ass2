@@ -1,6 +1,5 @@
 package bguspl.set.ex;
-import java.util.Queue;
-import java.util.LinkedList;
+
 import bguspl.set.Env;
 
 /**
@@ -51,12 +50,6 @@ public class Player implements Runnable {
      */
     private int score;
 
-    // Queue holding the incoming presses
-    private Queue<Integer> q;
-    
-    // Array holding the players slots
-    public int[] mySet;
-
     /**
      * The class constructor.
      *
@@ -66,14 +59,11 @@ public class Player implements Runnable {
      * @param id     - the id of the player.
      * @param human  - true iff the player is a human player (i.e. input is provided manually, via the keyboard).
      */
-
-
     public Player(Env env, Dealer dealer, Table table, int id, boolean human) {
         this.env = env;
         this.table = table;
         this.id = id;
         this.human = human;
-        q = new LinkedList<Integer>();
     }
 
     /**
@@ -87,35 +77,6 @@ public class Player implements Runnable {
 
         while (!terminate) {
             // TODO implement main player loop
-            synchronized(this){
-                while(q.isEmpty()){
-                     try {
-                    q.wait();
-                    }
-                    catch(InterruptedException ignored) {}
-                }
-                Integer nextSlot = q.remove();
-                table.placeToken(id, nextSlot);
-                if(table.countTokens(id) == 3) {
-                    //claimSet.add(id)
-                    //claimSet.notifyAll()
-                    //wait for answer from dealer
-
-                    // int[] slots = table.playersSlot(id);
-                    // boolean isSet = env.util.testSet(slots);
-                    // if (!isSet) {
-                    //     penalty();
-                    // }
-                    // else {
-                        
-                    // }
-                }
-                
-                //place or remove token
-                //remove from q
-                //if 3 tokens placed - point or penalty
-                //clear slotsToken
-            }
         }
         if (!human) try { aiThread.join(); } catch (InterruptedException ignored) {}
         env.logger.info("thread " + Thread.currentThread().getName() + " terminated.");
@@ -125,27 +86,15 @@ public class Player implements Runnable {
      * Creates an additional thread for an AI (computer) player. The main loop of this thread repeatedly generates
      * key presses. If the queue of key presses is full, the thread waits until it is not full.
      */
-
     private void createArtificialIntelligence() {
         // note: this is a very, very smart AI (!)
         aiThread = new Thread(() -> {
             env.logger.info("thread " + Thread.currentThread().getName() + " starting.");
             while (!terminate) {
                 // TODO implement player key press simulator
-                synchronized(this){
-                while(isFull()) {
-                    try{
-                        q.wait();
-                      }
-                    catch (InterruptedException ignored) {}
-                }
-                int randomSlot = (int) Math.random()*env.config.tableSize;
-                keyPressed(randomSlot);
-                }
-                // Original code
-                // try {
-                //     synchronized (this) { wait(); }
-                // } catch (InterruptedException ignored) {}
+                try {
+                    synchronized (this) { wait(); }
+                } catch (InterruptedException ignored) {}
             }
             env.logger.info("thread " + Thread.currentThread().getName() + " terminated.");
         }, "computer-" + id);
@@ -157,7 +106,6 @@ public class Player implements Runnable {
      */
     public void terminate() {
         // TODO implement
-        terminate = true;
     }
 
     /**
@@ -165,12 +113,8 @@ public class Player implements Runnable {
      *
      * @param slot - the slot corresponding to the key pressed.
      */
-    public synchronized void keyPressed(int slot) {
+    public void keyPressed(int slot) {
         // TODO implement
-        if (!isFull()) {
-            q.add(slot);
-            q.notifyAll();
-        }
     }
 
     /**
@@ -180,35 +124,20 @@ public class Player implements Runnable {
      * @post - the player's score is updated in the ui.
      */
     public void point() {
-        try{
-            Thread.sleep(env.config.pointFreezeMillis);
-          } catch (InterruptedException ignored) {}
+        // TODO implement
+
         int ignored = table.countCards(); // this part is just for demonstration in the unit tests
-        synchronized(this) {
-            env.ui.setScore(id,++score);
-        }
+        env.ui.setScore(id, ++score);
     }
 
     /**
      * Penalize a player and perform other related actions.
      */
     public void penalty() {
-        try{
-        Thread.sleep(env.config.penaltyFreezeMillis);
-             } catch (InterruptedException ignored) {}
+        // TODO implement
     }
 
     public int score() {
         return score;
     }
-
-    public synchronized boolean isFull() {
-        return (q.size()>2);
-    }
-
-    public void startThread() {
-        playerThread.start();
-    }
-
-
 }

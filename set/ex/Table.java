@@ -98,6 +98,7 @@ public class Table {
         cardToSlot[card] = slot;
         slotToCard[slot] = card;
         }
+        env.ui.placeCard(card, slot);
         // TODO implement
         
 
@@ -116,9 +117,11 @@ public class Table {
             cardToSlot[slot] = null;
             slotToCard[card] = null;
             for(int i = 0 ; i<env.config.players ; i++) {
+ 
                 slotsToken[slot][i] = false;
             }
         }
+        env.ui.removeCard(slot);
     }
 
     /**
@@ -127,12 +130,15 @@ public class Table {
      * @param slot   - the slot on which to place the token.
      */
     public void placeToken(int player, int slot) {
+
         if (slotsToken[slot][player]) {
             removeToken(player, slot);
+
         }
         else {
-            slotsToken[slot][player] = true;            
+            slotsToken[slot][player] = true;   
         }
+        env.ui.placeToken(player, slot);
     }
 
     /**
@@ -144,9 +150,11 @@ public class Table {
     public boolean removeToken(int player, int slot) {
         if (slotsToken[slot][player]) {
             slotsToken[slot][player] = false;
+            removeToken(player, slot);
             return true;
         }
         return false;
+
     }
 
     public synchronized int countTokens(int playerId) {

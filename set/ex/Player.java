@@ -56,7 +56,7 @@ public class Player implements Runnable {
     // Queue holding the incoming presses
     private Queue<Integer> q;
     
-    // Array holding the players slots
+    // list holding the players slots
     public List<Integer> mySet;
 
     //int determining if player should be scored (1), penalized (2) or dismissed (0)
@@ -64,6 +64,8 @@ public class Player implements Runnable {
 
     //Pointer to the dealer object
     Dealer dealer;
+
+
     /**
      * The class constructor.
      *
@@ -94,7 +96,6 @@ public class Player implements Runnable {
         playerThread = Thread.currentThread();
         env.logger.info("thread " + Thread.currentThread().getName() + " starting.");
         if (!human) createArtificialIntelligence();
-
         while (!terminate) {
             // TODO implement main player loop
             panishOrScore = 0;
@@ -105,14 +106,21 @@ public class Player implements Runnable {
                     }
                     catch(InterruptedException ignored) {}
                 }
+            }
                 Integer nextSlot = q.remove();
-                table.placeToken(id, nextSlot);
+                if(table.removeToken(id, nextSlot)) {
+                    mySet.remove((Integer) nextSlot);
+                }
+                else {
+                    table.placeToken(id, nextSlot);
+                    mySet.add(nextSlot);
+                }
                 if(mySet.size() == 3) {
                     dealer.claimedPlayer.add(this);
-                    dealer.dealerThread.interrupt();
+                    dealer.claimedPlayer.notifyAll();
                     while(dealer.claimedPlayer.contains(this)) {
                         try{
-                            wait();
+                            dealer.claimedPlayer.wait();
                         }
                         catch(InterruptedException e) {}
                     }
@@ -124,13 +132,14 @@ public class Player implements Runnable {
                         this.penalty();
                         mySet.clear();
                     }
+                    //if not point nor penalty clear set?
                 }
                 
                 //place or remove token
                 //remove from q
                 //if 3 tokens placed - point or penalty
                 //clear slotsToken
-            }
+            
         }
         if (!human) try { aiThread.join(); } catch (InterruptedException ignored) {}
         env.logger.info("thread " + Thread.currentThread().getName() + " terminated.");
@@ -146,7 +155,6 @@ public class Player implements Runnable {
         aiThread = new Thread(() -> {
             env.logger.info("thread " + Thread.currentThread().getName() + " starting.");
             while (!terminate) {
-                // TODO implement player key press simulator
                 synchronized(this){
                 while(isFull()) {
                     try{

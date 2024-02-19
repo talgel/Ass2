@@ -1,13 +1,12 @@
 package bguspl.set.ex;
-
 import bguspl.set.Env;
-
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.stream.Collectors;
+import java.util.Collections;
 import java.util.stream.IntStream;
 
 /**
@@ -80,6 +79,8 @@ public class Dealer implements Runnable {
             removeAllCardsFromTable();
         }
         announceWinners();
+        for(Player p : players) 
+            p.terminate();
         env.logger.info("thread " + Thread.currentThread().getName() + " terminated.");
     }
 
@@ -87,7 +88,8 @@ public class Dealer implements Runnable {
      * The inner loop of the dealer thread that runs as long as the countdown did not time out.
      */
     private void timerLoop() {
-            env.ui.updateTimerDisplay()
+            env.ui.setCountdown(reshuffleTime,false);
+            timeUpdated = System.currentTimeMillis();
         while (!terminate && System.currentTimeMillis() < reshuffleTime) {
             sleepUntilWokenOrTimeout();
             updateTimerDisplay(false);
@@ -127,13 +129,10 @@ public class Dealer implements Runnable {
                 boolean isSet = env.util.testSet(currentSet);
                 if(isSet){ 
                     for (Integer slot : nextPlayer.mySet) {
-                        for(int i = 0 ; i < players.length ; i++) {
-                            if (table.slotsToken[slot][i]) {
-                                players[i].mySet.remove((Integer) slot);
-                            }
-                        }
-                        table.removeCard(slot); //remove from players
+                        smartRemove(slot);
                     }
+                    env.ui.setCountdown(reshuffleTime,false);
+                    timeUpdated = System.currentTimeMillis();
                     nextPlayer.panishOrScore = 1;
                     //point player
                 }
@@ -157,15 +156,6 @@ public class Dealer implements Runnable {
                 table.placeCard(deck.remove(0), i);
             }
         }
-        // List<Integer> cardsOnTable = Arrays.stream(table.slotToCard).filter(Objects::nonNull).collect(Collectors.toList());
-
-        // // if(env.util.findSets(cardsOnTable, 1).size() == 0){
-        // //     removeAllCardsFromTable();
-        // //     if(env.util.findSets(deck, 1).size() == 0) {
-        // //         shouldFinish()
-        // //     }
-        // //     placeCardsOnTable();
-        // // }
     }
     
     }
@@ -184,7 +174,8 @@ public class Dealer implements Runnable {
      * Reset and/or update the countdown and the countdown display.
      */
     private void updateTimerDisplay(boolean reset) {
-        env.ui.setCountdown(reshuffleTime-System.currentTimeMillis(), reset);
+        long timeElapsed = System.currentTimeMillis() - timeUpdated;
+        env.ui.setCountdown(reshuffleTime-timeElapsed, reset);
     }
 
     /**
@@ -196,11 +187,12 @@ public class Dealer implements Runnable {
             if (table.slotToCard[i]!=null) {
                 int card = table.slotToCard[i];
                 deck.add(card);
-                table.removeCard(i);
+                smartRemove(i);
             } 
         }
-        env.util.spin();
     }
+        Collections.shuffle(deck);
+    
     }
 
     /**
@@ -225,5 +217,19 @@ public class Dealer implements Runnable {
             winnerArrey[i]=winningPlayers.get(i).id;
         } 
         env.ui.announceWinner(winnerArrey);
+    }
+
+
+    public void smartRemove(int slot) {
+    for(int i = 0 ; i < players.length ; i++) {
+        synchronized(table){
+            if (table.slotsToken[slot][i]) {
+                synchronized(players[i]){
+                    players[i].mySet.remove((Integer) slot);
+                }
+            }
+        }
+    }
+    table.removeCard(slot);
     }
 }

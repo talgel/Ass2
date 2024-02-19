@@ -63,7 +63,7 @@ public class Player implements Runnable {
     public volatile int panishOrScore;
 
     //Pointer to the dealer object
-    Dealer dealer;
+    public Dealer dealer;
 
 
     /**
@@ -97,7 +97,6 @@ public class Player implements Runnable {
         env.logger.info("thread " + Thread.currentThread().getName() + " starting.");
         if (!human) createArtificialIntelligence();
         while (!terminate) {
-            // TODO implement main player loop
             panishOrScore = 0;
             synchronized(this){
                 while(q.isEmpty()){
@@ -179,7 +178,6 @@ public class Player implements Runnable {
      * Called when the game should be terminated.
      */
     public void terminate() {
-        // TODO implement
         terminate = true;
     }
 
@@ -189,7 +187,6 @@ public class Player implements Runnable {
      * @param slot - the slot corresponding to the key pressed.
      */
     public synchronized void keyPressed(int slot) {
-        // TODO implement
         if (!isFull()) {
             q.add(slot);
             q.notifyAll();
@@ -203,9 +200,8 @@ public class Player implements Runnable {
      * @post - the player's score is updated in the ui.
      */
     public void point() {
-        synchronized(this) {
-            env.ui.setScore(id,++score);
-        }
+        env.ui.setScore(id,++score);
+        env.ui.setFreeze(id, env.config.pointFreezeMillis);
         try{
             Thread.sleep(env.config.pointFreezeMillis);
           } catch (InterruptedException ignored) {}
@@ -217,9 +213,10 @@ public class Player implements Runnable {
      * Penalize a player and perform other related actions.
      */
     public void penalty() {
+        env.ui.setFreeze(id, env.config.penaltyFreezeMillis);
         try{
-        Thread.sleep(env.config.penaltyFreezeMillis);
-             } catch (InterruptedException ignored) {}
+            Thread.sleep(env.config.penaltyFreezeMillis);
+        } catch (InterruptedException ignored) {}
     }
 
     public int score() {
@@ -233,6 +230,4 @@ public class Player implements Runnable {
     public void startThread() {
         playerThread.start();
     }
-
-
 }

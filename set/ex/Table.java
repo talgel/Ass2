@@ -99,7 +99,7 @@ public class Table {
         slotToCard[slot] = card;
         }
         env.ui.placeCard(card, slot);
-        // TODO implement
+        
         
 
     }

@@ -43,6 +43,9 @@ public class Dealer implements Runnable {
     //The Dealers thread
     public Thread dealerThread;
 
+    //Last time timer updated
+    private long timeUpdated = System.currentTimeMillis();
+
     /**
      * The time when the dealer needs to reshuffle the deck due to turn timeout.
      */
@@ -64,7 +67,7 @@ public class Dealer implements Runnable {
      */
     @Override
     public void run() {
-        dealerThread = Thread.currentThread();
+        dealerThread = Thread.currentThread(); //toDeltele
         env.logger.info("thread " + Thread.currentThread().getName() + " starting.");
         for(Player player : players) {
             Thread t = new Thread(player);
@@ -84,6 +87,7 @@ public class Dealer implements Runnable {
      * The inner loop of the dealer thread that runs as long as the countdown did not time out.
      */
     private void timerLoop() {
+            env.ui.updateTimerDisplay()
         while (!terminate && System.currentTimeMillis() < reshuffleTime) {
             sleepUntilWokenOrTimeout();
             updateTimerDisplay(false);
@@ -114,18 +118,21 @@ public class Dealer implements Runnable {
     private void removeCardsFromTable() {
         synchronized(table) {
         while(claimedPlayer.size() > 0) {
-            boolean stop = false;
             Player nextPlayer = claimedPlayer.remove();
-            for (Integer slot : nextPlayer.mySet) {
-                if(!table.slotsToken[slot][nextPlayer.id]) {
-                    stop = true;
+            if(nextPlayer.mySet.size() == 3) {
+                int[] currentSet = new int[3];
+                for (int i = 0 ; i < 3 ;i++) {
+                    currentSet[i] = nextPlayer.mySet.get(i);
                 }
-            }
-            if(!stop) {
-                boolean isSet = env.util.testSet(nextPlayer.mySet);
+                boolean isSet = env.util.testSet(currentSet);
                 if(isSet){ 
                     for (Integer slot : nextPlayer.mySet) {
-                        table.removeCard(slot);
+                        for(int i = 0 ; i < players.length ; i++) {
+                            if (table.slotsToken[slot][i]) {
+                                players[i].mySet.remove((Integer) slot);
+                            }
+                        }
+                        table.removeCard(slot); //remove from players
                     }
                     nextPlayer.panishOrScore = 1;
                     //point player
@@ -135,7 +142,7 @@ public class Dealer implements Runnable {
                     //panish player
                 }
             }
-            nextPlayer.playerThread.interrupt();
+            claimedPlayer.notifyAll();
         }
     }
     }
@@ -150,11 +157,15 @@ public class Dealer implements Runnable {
                 table.placeCard(deck.remove(0), i);
             }
         }
-        List<Integer> cardsOnTable = Arrays.stream(table.slotToCard).filter(Objects::nonNull).collect(Collectors.toList());
+        // List<Integer> cardsOnTable = Arrays.stream(table.slotToCard).filter(Objects::nonNull).collect(Collectors.toList());
 
-        if(env.util.findSets(cardsOnTable, 1).size() == 0){
-            removeAllCardsFromTable();
-        }
+        // // if(env.util.findSets(cardsOnTable, 1).size() == 0){
+        // //     removeAllCardsFromTable();
+        // //     if(env.util.findSets(deck, 1).size() == 0) {
+        // //         shouldFinish()
+        // //     }
+        // //     placeCardsOnTable();
+        // // }
     }
     
     }
@@ -164,7 +175,7 @@ public class Dealer implements Runnable {
      */
     private void sleepUntilWokenOrTimeout() {
         try {
-            Thread.sleep(env.config.turnTimeoutMillis);
+            claimedPlayer.wait(env.config.turnTimeoutMillis);
         }
         catch(InterruptedException e) {}
     }
@@ -188,6 +199,7 @@ public class Dealer implements Runnable {
                 table.removeCard(i);
             } 
         }
+        env.util.spin();
     }
     }
 
@@ -195,7 +207,23 @@ public class Dealer implements Runnable {
      * Check who is/are the winner/s and displays them.
      */
     private void announceWinners() {
-        // TODO implement
-
+        List<Player> winningPlayers=new LinkedList<Player>();
+        winningPlayers.add(players[0]);
+        for(Player player : players )
+        {
+            if(player.score()==winningPlayers.get(0).score())
+                winningPlayers.add(player);
+            else if (player.score()>winningPlayers.get(0).score()) 
+            {
+                winningPlayers.clear();
+                winningPlayers.add(player);
+            }
+        }
+        int[] winnerArrey = new int[winningPlayers.size()];
+        for(int i=0 ; i<winningPlayers.size();i++)
+        {
+            winnerArrey[i]=winningPlayers.get(i).id;
+        } 
+        env.ui.announceWinner(winnerArrey);
     }
 }

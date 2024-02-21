@@ -114,14 +114,16 @@ public class Table {
         } catch (InterruptedException ignored) {}
         synchronized(this) {
             Integer card = slotToCard[slot];
-            cardToSlot[slot] = null;
-            slotToCard[card] = null;
+            cardToSlot[card] = null;
+            slotToCard[slot] = null;
             for(int i = 0 ; i<env.config.players ; i++) {
  
                 slotsToken[slot][i] = false;
             }
         }
+        env.ui.removeTokens(slot);
         env.ui.removeCard(slot);
+
     }
 
     /**
@@ -150,7 +152,7 @@ public class Table {
     public boolean removeToken(int player, int slot) {
         if (slotsToken[slot][player]) {
             slotsToken[slot][player] = false;
-            removeToken(player, slot);
+            env.ui.removeToken(player, slot);
             return true;
         }
         return false;

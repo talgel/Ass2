@@ -65,6 +65,9 @@ public class Player implements Runnable {
     //Pointer to the dealer object
     public Dealer dealer;
 
+    // whether the player is freezed or not
+    private boolean freezed;
+
 
     /**
      * The class constructor.
@@ -86,6 +89,7 @@ public class Player implements Runnable {
         q = new LinkedList<Integer>();
         panishOrScore = 0;
         mySet = new ArrayList<Integer>();
+        freezed = false;
     }
 
     /**
@@ -98,38 +102,46 @@ public class Player implements Runnable {
         if (!human) createArtificialIntelligence();
         while (!terminate) {
             panishOrScore = 0;
-            synchronized(this){
+            synchronized(q){
                 while(q.isEmpty()){
                      try {
                     q.wait();
                     }
                     catch(InterruptedException ignored) {}
                 }
-            }
+            
                 Integer nextSlot = q.remove();
+            
                 if(table.removeToken(id, nextSlot)) {
                     mySet.remove((Integer) nextSlot);
                 }
                 else {
-                    table.placeToken(id, nextSlot);
-                    mySet.add(nextSlot);
+                    if(mySet.size()<3){
+                        table.placeToken(id, nextSlot);
+                        mySet.add(nextSlot);
+                    }
                 }
+                q.notifyAll();
+            }
                 if(mySet.size() == 3) {
+                synchronized(dealer.claimedPlayer){
                     dealer.claimedPlayer.add(this);
                     dealer.claimedPlayer.notifyAll();
+                
                     while(dealer.claimedPlayer.contains(this)) {
                         try{
                             dealer.claimedPlayer.wait();
                         }
                         catch(InterruptedException e) {}
                     }
+                }
                     if(panishOrScore == 1) {
-                        this.score();
-                        mySet.clear();
+                        this.point();
+                        
                     }
                     else if (panishOrScore == 2) {
                         this.penalty();
-                        mySet.clear();
+                        
                     }
                     //if not point nor penalty clear set?
                 }
@@ -154,20 +166,17 @@ public class Player implements Runnable {
         aiThread = new Thread(() -> {
             env.logger.info("thread " + Thread.currentThread().getName() + " starting.");
             while (!terminate) {
-                synchronized(this){
+                synchronized(q){
                 while(isFull()) {
                     try{
                         q.wait();
                       }
                     catch (InterruptedException ignored) {}
                 }
-                int randomSlot = (int) Math.random()*env.config.tableSize;
+            }
+                int randomSlot = (int) (Math.random()*env.config.tableSize);
                 keyPressed(randomSlot);
-                }
-                // Original code
-                // try {
-                //     synchronized (this) { wait(); }
-                // } catch (InterruptedException ignored) {}
+                
             }
             env.logger.info("thread " + Thread.currentThread().getName() + " terminated.");
         }, "computer-" + id);
@@ -186,11 +195,13 @@ public class Player implements Runnable {
      *
      * @param slot - the slot corresponding to the key pressed.
      */
-    public synchronized void keyPressed(int slot) {
-        if (!isFull()) {
+    public void keyPressed(int slot) {
+        synchronized(q){
+        if (!isFull() && !freezed) {
             q.add(slot);
             q.notifyAll();
         }
+    }
     }
 
     /**
@@ -200,11 +211,19 @@ public class Player implements Runnable {
      * @post - the player's score is updated in the ui.
      */
     public void point() {
-        env.ui.setScore(id,++score);
-        env.ui.setFreeze(id, env.config.pointFreezeMillis);
-        try{
-            Thread.sleep(env.config.pointFreezeMillis);
-          } catch (InterruptedException ignored) {}
+        int currScore = this.score;
+        env.ui.setScore(id,currScore + 1);
+        this.score = currScore + 1 ;
+        long currTime = System.currentTimeMillis();
+        
+        while (System.currentTimeMillis() - currTime  <= env.config.pointFreezeMillis) {
+            freezed = true;
+            try{
+                Thread.sleep(100);
+              } catch (InterruptedException ignored) {}
+              env.ui.setFreeze(id, env.config.pointFreezeMillis - System.currentTimeMillis() - currTime);
+        }
+        freezed = false;
         int ignored = table.countCards(); // this part is just for demonstration in the unit tests
 
     }
@@ -213,10 +232,15 @@ public class Player implements Runnable {
      * Penalize a player and perform other related actions.
      */
     public void penalty() {
-        env.ui.setFreeze(id, env.config.penaltyFreezeMillis);
-        try{
-            Thread.sleep(env.config.penaltyFreezeMillis);
-        } catch (InterruptedException ignored) {}
+        long currTime = System.currentTimeMillis();
+        while (System.currentTimeMillis() - currTime  <= env.config.penaltyFreezeMillis) {
+            freezed = true;
+            try{
+                Thread.sleep(100);
+              } catch (InterruptedException ignored) {}
+              env.ui.setFreeze(id, env.config.penaltyFreezeMillis - (System.currentTimeMillis() - currTime));
+        }
+        freezed = false;
     }
 
     public int score() {

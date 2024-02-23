@@ -1,12 +1,12 @@
 package bguspl.set.ex;
 import bguspl.set.Env;
-import java.util.Arrays;
+//import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Objects;
+//import java.util.Objects;
 import java.util.Queue;
 import java.util.stream.Collectors;
-import java.util.Collections;
+//import java.util.Collections;
 import java.util.stream.IntStream;
 
 /**
@@ -48,8 +48,7 @@ public class Dealer implements Runnable {
     /**
      * The time when the dealer needs to reshuffle the deck due to turn timeout.
      */
-    private long reshuffleTime = Long.MAX_VALUE;
-    //private long reshuffleTime = 60000;
+    //private long reshuffleTime = Long.MAX_VALUE;
     public Dealer(Env env, Table table, Player[] players) {
         this.env = env;
         this.table = table;

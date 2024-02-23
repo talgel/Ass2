@@ -165,6 +165,7 @@ public class Player implements Runnable {
         // note: this is a very, very smart AI (!)
         aiThread = new Thread(() -> {
             env.logger.info("thread " + Thread.currentThread().getName() + " starting.");
+            System.out.println("thread " + Thread.currentThread().getName() + " starting.");
             while (!terminate) {
                 synchronized(q){
                 while(isFull()) {
@@ -179,6 +180,8 @@ public class Player implements Runnable {
                 
             }
             env.logger.info("thread " + Thread.currentThread().getName() + " terminated.");
+            System.out.println("thread " + Thread.currentThread().getName() + " terminated.");
+
         }, "computer-" + id);
         aiThread.start();
     }

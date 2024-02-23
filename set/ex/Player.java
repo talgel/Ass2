@@ -222,7 +222,7 @@ public class Player implements Runnable {
               env.ui.setFreeze(id, env.config.pointFreezeMillis - (System.currentTimeMillis() - currTime));
         }
         freezed = false;
-        int ignored = table.countCards(); // this part is just for demonstration in the unit tests
+        //int ignored = table.countCards(); // this part is just for demonstration in the unit tests
 
     }
 

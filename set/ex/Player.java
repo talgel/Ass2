@@ -99,6 +99,7 @@ public class Player implements Runnable {
     public void run() {
         playerThread = Thread.currentThread();
         env.logger.info("thread " + Thread.currentThread().getName() + " starting.");
+        System.out.println("thread " + Thread.currentThread().getName() + " starting.");
         if (!human) createArtificialIntelligence();
         while (!terminate) {
             panishOrScore = 0;
@@ -109,9 +110,8 @@ public class Player implements Runnable {
                     }
                     catch(InterruptedException ignored) {}
                 }
-            
                 Integer nextSlot = q.remove();
-            
+            synchronized(mySet) {
                 if(table.removeToken(id, nextSlot)) {
                     mySet.remove((Integer) nextSlot);
                 }
@@ -121,9 +121,11 @@ public class Player implements Runnable {
                         mySet.add(nextSlot);
                     }
                 }
+            }
                 q.notifyAll();
             }
                 if(mySet.size() == 3) {
+                    
                 synchronized(dealer.claimedPlayer){
                     dealer.claimedPlayer.add(this);
                     dealer.claimedPlayer.notifyAll();
@@ -143,17 +145,12 @@ public class Player implements Runnable {
                         this.penalty();
                         
                     }
-                    //if not point nor penalty clear set?
-                }
-                
-                //place or remove token
-                //remove from q
-                //if 3 tokens placed - point or penalty
-                //clear slotsToken
-            
+                }   
         }
         if (!human) try { aiThread.join(); } catch (InterruptedException ignored) {}
+        //playerThread.interrupt();
         env.logger.info("thread " + Thread.currentThread().getName() + " terminated.");
+        System.out.println("thread " + Thread.currentThread().getName() + " terminated");
     }
 
     /**
@@ -185,7 +182,6 @@ public class Player implements Runnable {
         }, "computer-" + id);
         aiThread.start();
     }
-
     /**
      * Called when the game should be terminated.
      */
@@ -218,13 +214,12 @@ public class Player implements Runnable {
         env.ui.setScore(id,currScore + 1);
         this.score = currScore + 1 ;
         long currTime = System.currentTimeMillis();
-        
         while (System.currentTimeMillis() - currTime  <= env.config.pointFreezeMillis) {
             freezed = true;
             try{
                 Thread.sleep(100);
               } catch (InterruptedException ignored) {}
-              env.ui.setFreeze(id, env.config.pointFreezeMillis - System.currentTimeMillis() - currTime);
+              env.ui.setFreeze(id, env.config.pointFreezeMillis - (System.currentTimeMillis() - currTime));
         }
         freezed = false;
         int ignored = table.countCards(); // this part is just for demonstration in the unit tests
@@ -250,11 +245,9 @@ public class Player implements Runnable {
         return score;
     }
 
-    public synchronized boolean isFull() {
+    public boolean isFull() {
+        synchronized(q) {
         return (q.size()>2);
-    }
-
-    public void startThread() {
-        playerThread.start();
+        }
     }
 }

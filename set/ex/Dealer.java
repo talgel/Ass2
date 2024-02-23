@@ -67,6 +67,8 @@ public class Dealer implements Runnable {
     @Override
     public void run() {
         env.logger.info("thread " + Thread.currentThread().getName() + " starting.");
+        System.out.println("thread " + Thread.currentThread().getName() + " starting.");
+
         for(Player player : players) {
             Thread t = new Thread(player);
             t.start();
@@ -83,6 +85,8 @@ public class Dealer implements Runnable {
         for(Player p : players) 
             p.terminate();
         env.logger.info("thread " + Thread.currentThread().getName() + " terminated.");
+        System.out.println("thread " + Thread.currentThread().getName() + " starting.");
+
     }
 
     /**
@@ -123,12 +127,14 @@ public class Dealer implements Runnable {
         while(claimedPlayer.size() > 0) {
             Player nextPlayer = claimedPlayer.remove();
             synchronized(nextPlayer) {
+            synchronized(table){
             if(nextPlayer.mySet.size() == 3) {
                 int[] currentSet = new int[3];
                 for (int i = 0 ; i < 3 ;i++) {
                     currentSet[i] = table.slotToCard[nextPlayer.mySet.get(i)];
                 }
                 boolean isSet = env.util.testSet(currentSet);
+                
                 if(isSet){ 
                     while(!nextPlayer.mySet.isEmpty()) {
                         Integer slot = nextPlayer.mySet.get(0);
@@ -141,9 +147,15 @@ public class Dealer implements Runnable {
                 }
                 else {
                     nextPlayer.panishOrScore = 2;
+                    while(!nextPlayer.mySet.isEmpty()) {
+                        Integer slot = nextPlayer.mySet.get(0);
+                        smartTokenRemove(slot);
+                    }
                     //panish player
                 }
+            
             }
+        }
         }
         synchronized(claimedPlayer){
             claimedPlayer.notifyAll();
@@ -243,8 +255,9 @@ public class Dealer implements Runnable {
 
 
     public void smartRemove(int slot) {
-    for(int i = 0 ; i < players.length ; i++) {
-        synchronized(table){
+    synchronized(table){
+        for(int i = 0 ; i < players.length ; i++) {
+        
             if (table.slotsToken[slot][i]) {
                 synchronized(players[i]){
                     players[i].mySet.remove((Integer) slot);
@@ -254,6 +267,19 @@ public class Dealer implements Runnable {
     }
     table.removeCard(slot);
     }
+
+    public void smartTokenRemove(int slot) {
+        synchronized(table){
+        for(int i = 0 ; i < players.length ; i++) {
+            
+                if (table.slotsToken[slot][i]) {
+                    synchronized(players[i]){
+                        players[i].mySet.remove((Integer) slot);
+                    }
+                }
+            }
+        }
+        }
 
     public void shuffleDeck() {
         List<Integer> newDeck = new LinkedList<Integer>();

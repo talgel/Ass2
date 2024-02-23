@@ -54,7 +54,6 @@ public class Dealer implements Runnable {
         this.env = env;
         this.table = table;
         this.players = players;
-
         deck = IntStream.range(0, env.config.deckSize).boxed().collect(Collectors.toList());
 
         // new
@@ -75,17 +74,17 @@ public class Dealer implements Runnable {
         }
         
         while (!shouldFinish()) {
-            shuffleDeck();
+            //shuffleDeck();
             placeCardsOnTable();
             timerLoop();
             updateTimerDisplay(false);
             removeAllCardsFromTable();
         }
+        terminate();
         announceWinners();
-        for(Player p : players) 
-            p.terminate();
+
         env.logger.info("thread " + Thread.currentThread().getName() + " terminated.");
-        System.out.println("thread " + Thread.currentThread().getName() + " starting.");
+        System.out.println("thread " + Thread.currentThread().getName() + " terminated.");
 
     }
 
@@ -107,6 +106,9 @@ public class Dealer implements Runnable {
      * Called when the game should be terminated.
      */
     public void terminate() {
+        for(Player p : players) {
+            p.terminate();
+        }
         terminate = true;
     }
 
@@ -123,18 +125,17 @@ public class Dealer implements Runnable {
      * Checks cards should be removed from the table and removes them.
      */
     private void removeCardsFromTable() {
-        
         while(claimedPlayer.size() > 0) {
             Player nextPlayer = claimedPlayer.remove();
-            synchronized(nextPlayer) {
+            synchronized(nextPlayer.mySet) {
             synchronized(table){
+            
             if(nextPlayer.mySet.size() == 3) {
                 int[] currentSet = new int[3];
                 for (int i = 0 ; i < 3 ;i++) {
                     currentSet[i] = table.slotToCard[nextPlayer.mySet.get(i)];
                 }
                 boolean isSet = env.util.testSet(currentSet);
-                
                 if(isSet){ 
                     while(!nextPlayer.mySet.isEmpty()) {
                         Integer slot = nextPlayer.mySet.get(0);
@@ -149,7 +150,8 @@ public class Dealer implements Runnable {
                     nextPlayer.panishOrScore = 2;
                     while(!nextPlayer.mySet.isEmpty()) {
                         Integer slot = nextPlayer.mySet.get(0);
-                        smartTokenRemove(slot);
+                        nextPlayer.mySet.remove((Integer) slot);
+                        table.removeToken(nextPlayer.id,slot);
                     }
                     //panish player
                 }
@@ -161,7 +163,6 @@ public class Dealer implements Runnable {
             claimedPlayer.notifyAll();
         }
         }
-    
     }
 
     /**
@@ -182,7 +183,7 @@ public class Dealer implements Runnable {
      * Sleep for a fixed amount of time or until the thread is awakened for some purpose.
      */
     private void sleepUntilWokenOrTimeout() {
-        synchronized(claimedPlayer){
+    synchronized(claimedPlayer){
         try {
             claimedPlayer.wait(100);
         }
@@ -259,27 +260,14 @@ public class Dealer implements Runnable {
         for(int i = 0 ; i < players.length ; i++) {
         
             if (table.slotsToken[slot][i]) {
-                synchronized(players[i]){
+                synchronized(players[i].mySet){
                     players[i].mySet.remove((Integer) slot);
                 }
             }
         }
-    }
     table.removeCard(slot);
     }
-
-    public void smartTokenRemove(int slot) {
-        synchronized(table){
-        for(int i = 0 ; i < players.length ; i++) {
-            
-                if (table.slotsToken[slot][i]) {
-                    synchronized(players[i]){
-                        players[i].mySet.remove((Integer) slot);
-                    }
-                }
-            }
-        }
-        }
+    }
 
     public void shuffleDeck() {
         List<Integer> newDeck = new LinkedList<Integer>();

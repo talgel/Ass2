@@ -108,34 +108,46 @@ public class Player implements Runnable {
                      try {
                     q.wait();
                     }
-                    catch(InterruptedException ignored) {}
-                }
-                Integer nextSlot = q.remove();
-            synchronized(mySet) {
-                if(table.removeToken(id, nextSlot)) {
-                    mySet.remove((Integer) nextSlot);
-                }
-                else {
-                    if(mySet.size()<3){
-                        table.placeToken(id, nextSlot);
-                        mySet.add(nextSlot);
+                    catch(InterruptedException ignored) {
+                        break;
                     }
                 }
+                if(!terminate) {
+                    Integer nextSlot = q.remove();
+                    synchronized(mySet) {
+                    synchronized(table){
+                        if(table.removeToken(id, nextSlot)) {
+                            mySet.remove((Integer) nextSlot);
+                        }
+                        else {
+                            if(mySet.size()<3){
+                                table.placeToken(id, nextSlot);
+                                mySet.add(nextSlot);
+                            }
+                        }
+                    }
+            
+                    q.notifyAll();
+                }
             }
-                q.notifyAll();
+        
             }
-                if(mySet.size() == 3) {
+            if(!terminate && mySet.size() == 3) {
                     
                 synchronized(dealer.claimedPlayer){
                     dealer.claimedPlayer.add(this);
                     dealer.claimedPlayer.notifyAll();
                 
-                    while(dealer.claimedPlayer.contains(this)) {
+                    while(!terminate && dealer.claimedPlayer.contains(this)) {
                         try{
+                            System.out.println("player went into queue: " + id);
                             dealer.claimedPlayer.wait();
                         }
-                        catch(InterruptedException e) {}
+                        catch(InterruptedException e) {
+                            break;
+                        }
                     }
+                    System.out.println("player went out of loop: " + id + "with index: " + panishOrScore);
                 }
                     if(panishOrScore == 1) {
                         this.point();
@@ -145,7 +157,7 @@ public class Player implements Runnable {
                         this.penalty();
                         
                     }
-                }   
+            }   
         }
         if (!human) try { aiThread.join(); } catch (InterruptedException ignored) {}
         //playerThread.interrupt();
@@ -165,11 +177,13 @@ public class Player implements Runnable {
             System.out.println("thread " + Thread.currentThread().getName() + " starting.");
             while (!terminate) {
                 synchronized(q){
-                while(isFull()) {
+                while(!terminate && isFull()) {
                     try{
                         q.wait();
                       }
-                    catch (InterruptedException ignored) {}
+                    catch (InterruptedException ignored) {
+                        break;
+                    }
                 }
             }
                 int randomSlot = (int) (Math.random()*env.config.tableSize);
@@ -187,6 +201,10 @@ public class Player implements Runnable {
      */
     public void terminate() {
         terminate = true;
+        playerThread.interrupt();
+        if(!human)
+            aiThread.interrupt();
+        
     }
 
     /**
@@ -196,7 +214,7 @@ public class Player implements Runnable {
      */
     public void keyPressed(int slot) {
         synchronized(q){
-        if (!isFull() && !freezed) {
+        if (table.slotToCard[slot] != null && !isFull() && !freezed) {
             q.add(slot);
             q.notifyAll();
         }

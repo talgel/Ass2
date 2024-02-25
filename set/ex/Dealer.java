@@ -3,8 +3,12 @@ import bguspl.set.Env;
 //import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.NoSuchElementException;
 //import java.util.Objects;
 import java.util.Queue;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 //import java.util.Collections;
 import java.util.stream.IntStream;
@@ -37,7 +41,9 @@ public class Dealer implements Runnable {
     private volatile boolean terminate;
 
     // players claimed sets
-    public volatile Queue<Player> claimedPlayer;
+    //public volatile BlockingQueue<Player> claimedPlayer;
+    public volatile BlockingQueue<Player> claimedPlayer;
+    
 
     //The Dealers thread
     public Thread dealerThread;
@@ -56,7 +62,7 @@ public class Dealer implements Runnable {
         deck = IntStream.range(0, env.config.deckSize).boxed().collect(Collectors.toList());
 
         // new
-        claimedPlayer = new LinkedList<Player>();
+        claimedPlayer = new ArrayBlockingQueue<Player>(players.length);
     }
 
     /**
@@ -107,6 +113,9 @@ public class Dealer implements Runnable {
     public void terminate() {
         for(Player p : players) {
             p.terminate();
+            try {p.playerThread.join();}
+            catch(InterruptedException e) {}
+            
         }
         terminate = true;
     }
@@ -124,43 +133,57 @@ public class Dealer implements Runnable {
      * Checks cards should be removed from the table and removes them.
      */
     private void removeCardsFromTable() {
-        while(claimedPlayer.size() > 0) {
-            Player nextPlayer = claimedPlayer.remove();
-            synchronized(nextPlayer.mySet) {
-            synchronized(table){
-            
-            if(nextPlayer.mySet.size() == 3) {
-                int[] currentSet = new int[3];
-                for (int i = 0 ; i < 3 ;i++) {
-                    currentSet[i] = table.slotToCard[nextPlayer.mySet.get(i)];
-                }
-                boolean isSet = env.util.testSet(currentSet);
-                if(isSet){ 
-                    while(!nextPlayer.mySet.isEmpty()) {
-                        Integer slot = nextPlayer.mySet.get(0);
-                        smartRemove(slot);
+        while(!claimedPlayer.isEmpty()) {
+            try{
+                Player nextPlayer = claimedPlayer.poll(100,TimeUnit.MILLISECONDS);
+                System.out.println("dealer pooled player: " + nextPlayer.id);
+                if (nextPlayer!=null) {
+                    synchronized(nextPlayer.mySet) {
+                        synchronized(table){
+                            if(nextPlayer.mySet.size() == 3) {
+                                boolean isNull = false;
+                                int[] currentSet = new int[3];
+                                for (int i = 0 ; i < 3 ;i++) {
+                                    if(table.slotToCard[nextPlayer.mySet.get(i)]==null)
+                                        isNull = true;
+                                    else
+                                        currentSet[i] = table.slotToCard[nextPlayer.mySet.get(i)];
+                                }
+                                if(!isNull){
+                                    boolean isSet = env.util.testSet(currentSet);
+                                    if(isSet){ 
+                                        while(!nextPlayer.mySet.isEmpty()) {
+                                            Integer slot = nextPlayer.mySet.get(0);
+                                            smartRemove(slot);
+                                        }
+                                        env.ui.setCountdown(env.config.turnTimeoutMillis,false);
+                                        timeUpdated = System.currentTimeMillis();
+                                        System.out.println("player got score: " + nextPlayer.id);
+                                        nextPlayer.panishOrScore = 1;
+                                        //point player
+                                    }
+                                    else {
+                                        nextPlayer.panishOrScore = 2;
+                                        while(!nextPlayer.mySet.isEmpty()) {
+                                            Integer slot = nextPlayer.mySet.get(0);
+                                            nextPlayer.mySet.remove((Integer) slot);
+                                            table.removeToken(nextPlayer.id,slot);
+                                        }
+                                        //panish player
+                                    }
+                                }
+                            }
+                        }
                     }
-                    env.ui.setCountdown(env.config.turnTimeoutMillis,false);
-                    timeUpdated = System.currentTimeMillis();
-                    nextPlayer.panishOrScore = 1;
-                    //point player
-                }
-                else {
-                    nextPlayer.panishOrScore = 2;
-                    while(!nextPlayer.mySet.isEmpty()) {
-                        Integer slot = nextPlayer.mySet.get(0);
-                        nextPlayer.mySet.remove((Integer) slot);
-                        table.removeToken(nextPlayer.id,slot);
+                    synchronized(claimedPlayer){
+                        claimedPlayer.notifyAll();
                     }
-                    //panish player
-                }
-            
             }
         }
-        }
-        synchronized(claimedPlayer){
-            claimedPlayer.notifyAll();
-        }
+            catch(InterruptedException e) {
+                System.out.println("breaking");
+                break;
+            }
         }
     }
 
@@ -259,9 +282,9 @@ public class Dealer implements Runnable {
         for(int i = 0 ; i < players.length ; i++) {
         
             if (table.slotsToken[slot][i]) {
-                synchronized(players[i].mySet){
+                //synchronized(players[i].mySet){
                     players[i].mySet.remove((Integer) slot);
-                }
+                //}
             }
         }
     table.removeCard(slot);

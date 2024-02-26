@@ -1,4 +1,5 @@
 package bguspl.set.ex;
+
 import java.util.Queue;
 import java.util.ArrayList;
 import java.util.LinkedList;
@@ -34,7 +35,8 @@ public class Player implements Runnable {
     public Thread playerThread;
 
     /**
-     * The thread of the AI (computer) player (an additional thread used to generate key presses).
+     * The thread of the AI (computer) player (an additional thread used to generate
+     * key presses).
      */
     private Thread aiThread;
 
@@ -55,20 +57,32 @@ public class Player implements Runnable {
 
     // Queue holding the incoming presses
     private Queue<Integer> q;
-    
+
     // list holding the players slots
-    public List<Integer> mySet;
+    public List<Integer> set;
 
-    //int determining if player should be scored (1), penalized (2) or dismissed (0)
-    public volatile int panishOrScore;
+    // int determining if player should be scored (1), penalized (2) or dismissed
+    // (0)
+    public volatile panishOrScore penaltyOrScore;
 
-    //Pointer to the dealer object
+    // Pointer to the dealer object
     public Dealer dealer;
 
     // whether the player is freezed or not
     private boolean freezed;
 
-
+    //Avoiding magic numbers :
+    // AI sleep time between two presses
+    private final int aiTime = 20;
+    //while being freezed, sleep time between countdown update
+    private final int freezeUpdateTime = 100;
+    
+    //Enum class to determine dealer reaction for set
+    public enum panishOrScore {
+        NON,
+        SCORE,
+        PANISH,
+    }
     /**
      * The class constructor.
      *
@@ -76,9 +90,9 @@ public class Player implements Runnable {
      * @param dealer - the dealer object.
      * @param table  - the table object.
      * @param id     - the id of the player.
-     * @param human  - true iff the player is a human player (i.e. input is provided manually, via the keyboard).
+     * @param human  - true iff the player is a human player (i.e. input is provided
+     *               manually, via the keyboard).
      */
-
 
     public Player(Env env, Dealer dealer, Table table, int id, boolean human) {
         this.env = env;
@@ -87,124 +101,128 @@ public class Player implements Runnable {
         this.human = human;
         this.dealer = dealer;
         q = new LinkedList<Integer>();
-        panishOrScore = 0;
-        mySet = new ArrayList<Integer>();
+        penaltyOrScore = panishOrScore.NON;
+        set = new ArrayList<Integer>();
         freezed = false;
     }
 
     /**
-     * The main player thread of each player starts here (main loop for the player thread).
+     * The main player thread of each player starts here (main loop for the player
+     * thread).
      */
     @Override
     public void run() {
-        playerThread = Thread.currentThread();
-        env.logger.info("thread " + Thread.currentThread().getName() + " starting.");
-        System.out.println("thread " + Thread.currentThread().getName() + " starting.");
-        if (!human) createArtificialIntelligence();
+        synchronized(dealer.threadList) {
+            playerThread = Thread.currentThread();
+            env.logger.info("thread " + Thread.currentThread().getName() + " starting.");
+            dealer.threadList.push(this);
+            if (!human)
+                createArtificialIntelligence();
+            dealer.threadList.notifyAll();
+        }
         while (!terminate) {
-            panishOrScore = 0;
-            synchronized(q){
-                while(q.isEmpty()){
-                     try {
-                    q.wait();
-                    }
-                    catch(InterruptedException ignored) {
+            penaltyOrScore = panishOrScore.NON;
+            synchronized (q) {
+                while (q.isEmpty()) {
+                    try {
+                        q.wait();
+                    } catch (InterruptedException ignored) {
                         break;
                     }
                 }
-                if(!terminate) {
+                if (!terminate) {
                     Integer nextSlot = q.remove();
-                    synchronized(mySet) {
-                    synchronized(table){
-                        if(table.removeToken(id, nextSlot)) {
-                            mySet.remove((Integer) nextSlot);
-                        }
-                        else {
-                            if(mySet.size()<3){
-                                table.placeToken(id, nextSlot);
-                                mySet.add(nextSlot);
+                    synchronized (table) {
+                        synchronized (set) {
+                            if (table.removeToken(id, nextSlot)) {
+                                set.remove((Integer) nextSlot);
+                            } else {
+                                if (set.size() < env.config.featureSize) {  
+                                    if (table.slotToCard[nextSlot] != null){
+                                        table.placeToken(id, nextSlot);
+                                        set.add(nextSlot);
+                                    }
+                                }
                             }
                         }
+
+                        q.notifyAll();
                     }
-            
-                    q.notifyAll();
                 }
+
             }
-        
-            }
-            if(!terminate && mySet.size() == 3) {
-                    
-                synchronized(dealer.claimedPlayer){
-                    dealer.claimedPlayer.add(this);
-                    dealer.claimedPlayer.notifyAll();
-                
-                    while(!terminate && dealer.claimedPlayer.contains(this)) {
-                        try{
-                            System.out.println("player went into queue: " + id);
-                            dealer.claimedPlayer.wait();
-                        }
-                        catch(InterruptedException e) {
+            if (!terminate && set.size() == env.config.featureSize) {
+                synchronized (dealer.claimedSetPlayers) {
+                    dealer.claimedSetPlayers.add(this);
+                    dealer.claimedSetPlayers.notifyAll();
+                    while (!terminate && dealer.claimedSetPlayers.contains(this)) {
+                        try {
+                            dealer.claimedSetPlayers.wait();
+                        } catch (InterruptedException e) {
                             break;
                         }
                     }
-                    System.out.println("player went out of loop: " + id + "with index: " + panishOrScore);
                 }
-                    if(panishOrScore == 1) {
-                        this.point();
-                        
-                    }
-                    else if (panishOrScore == 2) {
-                        this.penalty();
-                        
-                    }
-            }   
+                if (penaltyOrScore == panishOrScore.SCORE) {
+                    this.point();
+
+                } else if (penaltyOrScore == panishOrScore.PANISH) {
+                    this.penalty();
+
+                }
+            }
         }
-        if (!human) try { aiThread.join(); } catch (InterruptedException ignored) {}
-        //playerThread.interrupt();
+        if (!human)
+            try {
+                aiThread.join();
+            } catch (InterruptedException ignored) {
+            }
         env.logger.info("thread " + Thread.currentThread().getName() + " terminated.");
-        System.out.println("thread " + Thread.currentThread().getName() + " terminated");
     }
 
     /**
-     * Creates an additional thread for an AI (computer) player. The main loop of this thread repeatedly generates
-     * key presses. If the queue of key presses is full, the thread waits until it is not full.
+     * Creates an additional thread for an AI (computer) player. The main loop of
+     * this thread repeatedly generates
+     * key presses. If the queue of key presses is full, the thread waits until it
+     * is not full.
      */
 
     private void createArtificialIntelligence() {
         // note: this is a very, very smart AI (!)
         aiThread = new Thread(() -> {
             env.logger.info("thread " + Thread.currentThread().getName() + " starting.");
-            System.out.println("thread " + Thread.currentThread().getName() + " starting.");
             while (!terminate) {
-                synchronized(q){
-                while(!terminate && isFull()) {
-                    try{
-                        q.wait();
-                      }
-                    catch (InterruptedException ignored) {
-                        break;
+                try {
+                    Thread.sleep(aiTime);
+                } catch (InterruptedException e) {
+                }
+                synchronized (q) {
+                    while (!terminate && isFull()) {
+                        try {
+                            q.wait();
+                        } catch (InterruptedException ignored) {
+                            break;
+                        }
                     }
                 }
-            }
-                int randomSlot = (int) (Math.random()*env.config.tableSize);
+                int randomSlot = (int) (Math.random() * env.config.tableSize);
                 keyPressed(randomSlot);
-                
+
             }
             env.logger.info("thread " + Thread.currentThread().getName() + " terminated.");
-            System.out.println("thread " + Thread.currentThread().getName() + " terminated.");
-
         }, "computer-" + id);
         aiThread.start();
     }
+
     /**
      * Called when the game should be terminated.
      */
     public void terminate() {
         terminate = true;
         playerThread.interrupt();
-        if(!human)
+        if (!human)
             aiThread.interrupt();
-        
+
     }
 
     /**
@@ -213,12 +231,12 @@ public class Player implements Runnable {
      * @param slot - the slot corresponding to the key pressed.
      */
     public void keyPressed(int slot) {
-        synchronized(q){
-        if (table.slotToCard[slot] != null && !isFull() && !freezed) {
-            q.add(slot);
-            q.notifyAll();
+        synchronized (q) {
+            if (table.slotToCard[slot] != null && !isFull() && !freezed) {
+                q.add(slot);
+                q.notifyAll();
+            }
         }
-    }
     }
 
     /**
@@ -228,19 +246,18 @@ public class Player implements Runnable {
      * @post - the player's score is updated in the ui.
      */
     public void point() {
-        int currScore = this.score;
-        env.ui.setScore(id,currScore + 1);
-        this.score = currScore + 1 ;
+        env.ui.setScore(id, ++score);
         long currTime = System.currentTimeMillis();
-        while (System.currentTimeMillis() - currTime  <= env.config.pointFreezeMillis) {
+        while (System.currentTimeMillis() - currTime <= env.config.pointFreezeMillis) {
             freezed = true;
-            try{
-                Thread.sleep(100);
-              } catch (InterruptedException ignored) {}
-              env.ui.setFreeze(id, env.config.pointFreezeMillis - (System.currentTimeMillis() - currTime));
+            try {
+                Thread.sleep(freezeUpdateTime);
+            } catch (InterruptedException ignored) {
+            }
+            env.ui.setFreeze(id, env.config.pointFreezeMillis - (System.currentTimeMillis() - currTime));
         }
         freezed = false;
-        //int ignored = table.countCards(); // this part is just for demonstration in the unit tests
+        int ignored = table.countCards(); // this part is just for demonstration in
 
     }
 
@@ -249,12 +266,13 @@ public class Player implements Runnable {
      */
     public void penalty() {
         long currTime = System.currentTimeMillis();
-        while (System.currentTimeMillis() - currTime  <= env.config.penaltyFreezeMillis) {
+        while (System.currentTimeMillis() - currTime <= env.config.penaltyFreezeMillis) {
             freezed = true;
-            try{
-                Thread.sleep(100);
-              } catch (InterruptedException ignored) {}
-              env.ui.setFreeze(id, env.config.penaltyFreezeMillis - (System.currentTimeMillis() - currTime));
+            try {
+                Thread.sleep(freezeUpdateTime);
+            } catch (InterruptedException ignored) {
+            }
+            env.ui.setFreeze(id, env.config.penaltyFreezeMillis - (System.currentTimeMillis() - currTime));
         }
         freezed = false;
     }
@@ -264,8 +282,8 @@ public class Player implements Runnable {
     }
 
     public boolean isFull() {
-        synchronized(q) {
-        return (q.size()>2);
+        synchronized (q) {
+            return (q.size() >= env.config.featureSize);
         }
     }
 }
